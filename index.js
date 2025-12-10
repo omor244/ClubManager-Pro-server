@@ -29,20 +29,20 @@ app.use(
 app.use(express.json())
 
 // jwt middlewares
-// const verifyJWT = async (req, res, next) => {
-//   const token = req?.headers?.authorization?.split(' ')[1]
-//   console.log(token)
-//   if (!token) return res.status(401).send({ message: 'Unauthorized Access!' })
-//   try {
-//     const decoded = await admin.auth().verifyIdToken(token)
-//     req.tokenEmail = decoded.email
-//     console.log(decoded)
-//     next()
-//   } catch (err) {
-//     console.log(err)
-//     return res.status(401).send({ message: 'Unauthorized Access!', err })
-//   }
-// }
+const verifyJWT = async (req, res, next) => {
+  const token = req?.headers?.authorization?.split(' ')[1]
+  console.log(token)
+  if (!token) return res.status(401).send({ message: 'Unauthorized Access!' })
+  try {
+    const decoded = await admin.auth().verifyIdToken(token)
+    req.tokenEmail = decoded.email
+    console.log(decoded)
+    next()
+  } catch (err) {
+    console.log(err)
+    return res.status(401).send({ message: 'Unauthorized Access!', err })
+  }
+}
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(process.env.MONGODB_URI, {
@@ -61,7 +61,8 @@ async function run() {
     const retistereventsCollection = db.collection("register")
     const usersCollection = db.collection("users")
     const membershipPayments = db.collection("payment")
-    
+    const managercollection = db.collection("manager")
+    const membershipscolection = db.collection('memberships')
 
     app.post('/clubs', async (req, res) => {
       const club = req.body
@@ -79,6 +80,13 @@ async function run() {
       const result = await cursor.toArray()
       res.send(result)
     })
+    app.get('/clubs/pending', async (req, res) => {
+       
+      const cursor = clubsCollection.find({status: 'pending'})
+      const result = await cursor.toArray()
+      res.send(result)
+    })
+
     app.get('/clubs/:id', async (req, res) => {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
@@ -87,12 +95,34 @@ async function run() {
     })
 
 
+    app.patch('/update/club/:id', async (req, res) => {
+      const id = req.params.id 
+      const query = { _id: new ObjectId(id) }
+      const updateddoc = {
+        $set: {
+          status: 'approved'
+         }
+       }
+      const result = await clubsCollection.updateOne(query, updateddoc)
+      res.send(result)
+    } )
+    app.delete('/delete/club/:id', async (req, res) => {
+      const id = req.params.id 
+      const query = { _id: new ObjectId(id) }
+      const result = await clubsCollection.deleteOne(query)
+      res.send(result)
+    } )
+
+   
 
     // events relayed API
 
     app.post('/events', async (req, res) => {
-
+      
+     
       const events = req.body
+      
+      
       const result = await eventsCollection.insertOne(events)
       res.send(result)
     })
@@ -114,6 +144,33 @@ async function run() {
       const result = await cursor.toArray()
       res.send(result)
     })
+
+    app.get('/events/:email/update', async (req, res) => {
+
+      const email = req.params.email 
+      const result = await eventsCollection.find({email: email }).toArray()
+      res.send(result)
+    } )
+    app.delete('/events/:id/delete', async (req, res) => {
+
+      const id = req.params.id
+      const query = {_id: new ObjectId(id)}
+      const result = await eventsCollection.deleteOne(query)
+      res.send(result)
+    } )
+    app.patch('/events/:id/update', async (req, res) => {
+
+      const id = req.params.id
+      
+      const qurey = {_id: new ObjectId(id)}
+      const updatedDoc = {
+        $set: {
+          status: 'approved'
+        }
+      }
+      const result = await eventsCollection.updateOne(qurey, updatedDoc)
+      res.send(result)
+    } )
 
     app.delete('/events/delete/:id', async (req, res) => {
 
@@ -166,6 +223,27 @@ async function run() {
 
       res.send(result)
     })
+    app.get('/users/req', verifyJWT,  async (req, res) => {
+      const adminemail = req?.tokenEmail
+      const result = await managercollection.find().toArray()
+      // { email: { $ne: adminemail } }
+      res.send(result)
+
+    })
+
+    app.patch('/update-role', verifyJWT, async (req, res) => {
+
+      const { email, role } = req.body
+      const result = await usersCollection.updateOne({ email }, { $set: { role } })
+
+      await managercollection.deleteOne({ email })
+
+      console.log(result)
+
+      res.send(result)
+
+
+    })
 
     app.get('/users/role/:email', async (req, res) => {
       const email = req.params.email;
@@ -178,10 +256,17 @@ async function run() {
 
       res.send({ role: result.role });
     });
-    app.get('/manager-request', async (req, res) => {
+    app.post('/manager-request', async (req, res) => {
+
       const managerinfo = req.body 
 
+      const existe = await managercollection.findOne({ email: managerinfo.email })
       
+      if(existe) return res.send({massage: 'Already Requested'})
+       
+      const result = await managercollection.insertOne(managerinfo)
+     
+      res.send(result)
     })
 
     // payment related API
@@ -254,8 +339,8 @@ async function run() {
 
         }
         orderinfo.created_At = new Date().toLocaleDateString()
-       
-        console.log("orderinformation",orderinfo)
+         
+        
         const result = await membershipPayments.insertOne(orderinfo)
 
         return res.send(result)
@@ -269,6 +354,11 @@ async function run() {
       const result = await membershipPayments.find({ member: email }).toArray()
       res.send(result)
     })
+    app.get('/payment', async (req, res) => {
+      
+      const result = await membershipPayments.find().toArray()
+      res.send(result)
+    })
     app.delete('/Myclubs/delete/:id', async (req, res) => {
 
       const id = req.params.id
@@ -278,10 +368,46 @@ async function run() {
       res.send(result)
     })
 
+    // / memberships related api
+    
+    app.post('/memberships', async (req, res) => {
+      const info = req.body
+      
+      const result = await membershipscolection.insertOne(info)
+
+      res.send(result)
+    })
+    
+    app.get('/memberships/:email', async (req, res) => {
+      
+      const email = req.params.email 
+      
+      const result = await membershipscolection.find({ clubEmail: email}).toArray()
+
+      res.send(result)
+    })
+    app.delete('/memberships/:id', async (req, res) => {
+      const id = req.params.id 
+      const qurey = {_id: new ObjectId(id)}
+      
+      const result = await membershipscolection.deleteOne(qurey)
+
+      res.send(result)
+    })
+
+    /
+
 
 
    
-
+    //  register related api
+      
+      app.get('/register/manager/:email', async (req, res) => {
+        
+        const email = req.params.email 
+        const result = await retistereventsCollection.find({ managerEvent: email }).toArray()
+        res.send(result)
+      })
 
 
 
