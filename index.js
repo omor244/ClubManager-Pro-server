@@ -75,11 +75,30 @@ async function run() {
       const result = await cursor.limit(6).sort({ createdAt: 1 }).toArray()
       res.send(result)
     })
+    // 💡 Backend Solution:
+    // Backend (Express Route) - Enhanced Logic
     app.get('/clubs', async (req, res) => {
-      const cursor = clubsCollection.find()
-      const result = await cursor.toArray()
-      res.send(result)
-    })
+
+      const { search = '', filter ='' } = req.query;
+
+      
+      const trimmedSearch = search.trim();
+
+      let query = {};
+
+      if (trimmedSearch.length > 0) {
+        query = {
+          clubName: {
+            $regex: trimmedSearch,
+            $options: 'i', 
+          },
+        };
+      }
+
+      const cursor = clubsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
     app.get('/clubs/pending', async (req, res) => {
        
       const cursor = clubsCollection.find({status: 'pending'})
