@@ -80,9 +80,13 @@ async function run() {
     app.get('/clubs', async (req, res) => {
 
       const { search = '', filter ='' } = req.query;
-
+   
       
       const trimmedSearch = search.trim();
+      const trimmedFilter = filter.trim();
+      
+      console.log(trimmedFilter)
+      
 
       let query = {};
 
@@ -94,6 +98,17 @@ async function run() {
           },
         };
       }
+      if (trimmedFilter.length > 0) {
+      
+        query = {
+          category: {
+            $regex: trimmedFilter,
+            $options: 'i',
+          },
+        };
+      }
+
+   
 
       const cursor = clubsCollection.find(query);
       const result = await cursor.toArray();
