@@ -19,7 +19,7 @@ app.use(
   cors({
     origin: [
       'http://localhost:5173',
-      'http://localhost:5174',
+      'https://clubmanagementpro.netlify.app',
       'https://b12-m11-session.web.app',
     ],
     credentials: true,
@@ -64,19 +64,30 @@ async function run() {
     const managercollection = db.collection("manager")
     const membershipscolection = db.collection('memberships')
 
+    const verifyADMIN = async (req, res, next) => {
+      const email = req.tokenEmail
+      const user = await usersCollection.findOne({ email })
+      if (user?.role !== 'admin')
+        return res
+          .status(403)
+          .send({ message: 'Admin only Actions!', role: user?.role })
+
+      next()
+    }
+
+    //  clubs releted api 
     app.post('/clubs', async (req, res) => {
       const club = req.body
+   
       const result = await clubsCollection.insertOne(club)
       res.send(result)
     })
-    //  clubs releted api 
     app.get('/clubs/limit', async (req, res) => {
       const cursor = clubsCollection.find()
       const result = await cursor.limit(6).sort({ createdAt: 1 }).toArray()
       res.send(result)
     })
-    // 💡 Backend Solution:
-    // Backend (Express Route) - Enhanced Logic
+  
     app.get('/clubs', async (req, res) => {
 
       const { search = '', filter ='' } = req.query;
@@ -85,7 +96,7 @@ async function run() {
       const trimmedSearch = search.trim();
       const trimmedFilter = filter.trim();
       
-      console.log(trimmedFilter)
+    
       
 
       let query = {};
@@ -161,10 +172,23 @@ async function run() {
       
      
       const events = req.body
+      const clubId = req.body.clubId
+
+      const id = {_id: new ObjectId(clubId)}
+    
+      const club = await clubsCollection.findOne(id)
+  
+      if (!club) {
+        return res.status(404).send({ message: 'Club not found for the given ID.' })
+      }
+       
+  
+     
+        const result = await eventsCollection.insertOne(events)
+         
+        res.send(result)
+   
       
-      
-      const result = await eventsCollection.insertOne(events)
-      res.send(result)
     })
 
     app.post('/register/events', async (req, res) => {
@@ -185,7 +209,7 @@ async function run() {
       res.send(result)
     })
 
-    app.get('/events/:email/update', async (req, res) => {
+    app.get('/events/:email/update', verifyJWT,  async (req, res) => {
 
       const email = req.params.email 
       const result = await eventsCollection.find({email: email }).toArray()
@@ -271,7 +295,7 @@ async function run() {
 
     })
 
-    app.patch('/update-role', verifyJWT, async (req, res) => {
+    app.patch('/update-role',  async (req, res) => {
 
       const { email, role } = req.body
       const result = await usersCollection.updateOne({ email }, { $set: { role } })
@@ -364,6 +388,7 @@ async function run() {
       if (transection) return 
 
       const plant = await clubsCollection.findOne({ _id: new ObjectId(session.metadata.clubId) })
+
       if (session.status === "complete" || plant ) {
 
         const orderinfo = {
