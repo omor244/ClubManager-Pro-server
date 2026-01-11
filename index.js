@@ -19,7 +19,9 @@ app.use(
   cors({
     origin: [
       'http://localhost:5173',
+      'http://localhost:3000',
       'https://clubmanagementpro.netlify.app',
+      'https://clubsphere-beta.vercel.app',
       'https://b12-m11-session.web.app',
     ],
     credentials: true,
@@ -89,41 +91,48 @@ async function run() {
     })
   
     app.get('/clubs', async (req, res) => {
+      try {
+        const { search = '', filter = '', sort = '' } = req.query;
+        
+        const trimmedSearch = search.trim();
+        const trimmedFilter = filter.trim();
 
-      const { search = '', filter ='' } = req.query;
-   
-      
-      const trimmedSearch = search.trim();
-      const trimmedFilter = filter.trim();
-      
-    
-      
+        // Initialize the query object
+        let query = {};
 
-      let query = {};
+        // 1. Combine Search and Filter (Requirement: Multi-logic filtering)
+        if (trimmedSearch.length > 0) {
+          query.clubName = { $regex: trimmedSearch, $options: 'i' };
+        }
 
-      if (trimmedSearch.length > 0) {
-        query = {
-          clubName: {
-            $regex: trimmedSearch,
-            $options: 'i', 
-          },
-        };
+        if (trimmedFilter.length > 0) {
+          query.category = { $regex: trimmedFilter, $options: 'i' };
+        }
+
+        // 2. Define Sorting Logic
+        let sortOptions = {};
+        if (sort === 'priceLow') {
+          sortOptions = { membershipFee: 1 }; // Ascending
+        } else if (sort === 'priceHigh') {
+          sortOptions = { membershipFee: -1 }; // Descending
+        } else if (sort === 'newest') {
+          sortOptions = { createdAt: -1 }; // Latest first
+        } else {
+          // Default sort (e.g., by creation date)
+          sortOptions = { _id: -1 };
+        }
+
+        // 3. Execute Query with Sort
+        const result = await clubsCollection
+          .find(query)
+          .sort(sortOptions)
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.error("Database Error:", error);
+        res.status(500).send({ message: "Error fetching clubs" });
       }
-      if (trimmedFilter.length > 0) {
-      
-        query = {
-          category: {
-            $regex: trimmedFilter,
-            $options: 'i',
-          },
-        };
-      }
-
-   
-
-      const cursor = clubsCollection.find(query);
-      const result = await cursor.toArray();
-      res.send(result);
     });
     app.get('/clubs/pending', async (req, res) => {
        
@@ -287,6 +296,18 @@ async function run() {
 
       res.send(result)
     })
+    app.get('/users', async (req, res) => {
+
+      const result = await usersCollection.find().toArray()
+      res.send(result)
+    })
+    app.get('/users/payment', async (req, res) => {
+
+      const result = await membershipPayments.find().toArray()
+      res.send(result)
+    })
+
+
     app.get('/users/req', verifyJWT,  async (req, res) => {
       const adminemail = req?.tokenEmail
       const result = await managercollection.find().toArray()
@@ -462,7 +483,20 @@ async function run() {
       res.send(result)
     })
 
-    /
+    
+    app.patch('/profile/:id', async (req, res) => {
+      const id = req.query.id
+      const { name, image } = req.body 
+      const query = { _id: new ObjectId(id) }
+      
+      const updatedDoc = {
+        $set: {
+          name: name,
+          image: image
+        }
+      }
+      
+    })
 
 
 
